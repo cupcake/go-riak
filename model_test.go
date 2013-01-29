@@ -8,8 +8,8 @@ import (
 )
 
 type DocumentModel struct {
-	FieldS string  "string_field"
-	FieldF float64 "float_field"
+	FieldS string  `riak:"string_field"`
+	FieldF float64 `riak:"float_field"`
 	FieldB bool
 	Model
 }
@@ -61,7 +61,7 @@ func TestModel(t *testing.T) {
 
 type DocumentModelWithLinks struct {
 	FieldS string
-	ALink  One "tag_as_parent"
+	ALink  One `riak:"tag_as_parent"`
 	BLink  One // Will automatically use own name as a tag when linking
 	Model
 }
@@ -266,12 +266,12 @@ func TestModelTime(t *testing.T) {
 }
 
 type SubStruct struct {
-	Value string "value"
+	Value string `riak:"value"`
 }
 
 type DMInclude struct {
-	Name string    "name"
-	Sub  SubStruct "sub"
+	Name string    `riak:"name"`
+	Sub  SubStruct `riak:"sub"`
 	Model
 }
 

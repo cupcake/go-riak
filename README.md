@@ -94,9 +94,9 @@ For example the following Ruby/Ripple class:
 can be mapped to the following Go struct:
 ```go
     type Device struct {
-        DownloadEnabled  bool    "download_enabled"
-        Ip               string  "ip"
-        Description      string  "description"
+        DownloadEnabled  bool    `riak:"download_enabled"`
+        Ip               string  `riak:"ip"`
+        Description      string  `riak:"description"`
         riak.Model
     }
 ```

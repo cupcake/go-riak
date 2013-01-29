@@ -135,7 +135,7 @@ func check_dest(dest interface{}) (dv reflect.Value, dt reflect.Type, rm reflect
 }
 
 type ModelName struct {
-	XXXXModelNameXXXX string "_type"
+	XXXXModelNameXXXX string `riak:"_type"`
 }
 
 /*
@@ -160,10 +160,8 @@ func (c *Client) mapData(dv reflect.Value, dt reflect.Type, data []byte, links [
 		ft := dt.Field(i)
 		fv := dv.Field(i)
 		if ft.Type == reflect.TypeOf(One{}) {
-			var name string
-			if ft.Tag != "" {
-				name = string(ft.Tag)
-			} else {
+			name := ft.Tag.Get("riak")
+			if name == "" {
 				name = ft.Name
 			}
 			// Search in Links
@@ -173,10 +171,8 @@ func (c *Client) mapData(dv reflect.Value, dt reflect.Type, data []byte, links [
 				}
 			}
 		} else if ft.Type == reflect.TypeOf(Many{}) {
-			var name string
-			if ft.Tag != "" {
-				name = string(ft.Tag)
-			} else {
+			name := ft.Tag.Get("riak")
+			if name == "" {
 				name = ft.Name
 			}
 			// Search in Links
@@ -381,10 +377,8 @@ func (c *Client) SaveAs(newKey string, dest Resolver) (err error) {
 	for i := 0; i < dt.NumField(); i++ {
 		ft := dt.Field(i)
 		fv := dv.Field(i)
-		var fieldname string
-		if ft.Tag != "" {
-			fieldname = string(ft.Tag)
-		} else {
+		fieldname := ft.Tag.Get("riak")
+		if fieldname == "" {
 			fieldname = ft.Name
 		}
 		if ft.Type == reflect.TypeOf(One{}) {
