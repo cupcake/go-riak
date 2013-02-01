@@ -2,5 +2,9 @@ language: go
 services:
   - riak
 install:
+  - mkdir -p $GOPATH/src/github.com
+  - mv $HOME/build/titanous $GOPATH/src/github.com/
+  - cd $GOPATH/src/github.com/titanous/go.riak
   - go get -d -v ./... && go build -v ./...
   - go get -v github.com/bmizerany/assert
+  - go test -i
