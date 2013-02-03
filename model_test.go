@@ -26,7 +26,7 @@ func TestModel(t *testing.T) {
 	assert.T(t, err == nil)
 	// Check that the JSON is correct
 	t.Logf(string(doc.robject.Data))
-	assert.T(t, `{"_type":"DocumentModel","string_field":"text","float_field":1.2,"FieldB":true}` == string(doc.robject.Data))
+	assert.T(t, `{"string_field":"text","float_field":1.2,"FieldB":true}` == string(doc.robject.Data))
 
 	// Load it from Riak and check that the fields of the DocumentModel struct are set correctly
 	doc2 := DocumentModel{}
@@ -288,7 +288,7 @@ func TestModelIncludingOtherStruct(t *testing.T) {
 	err = client.Load("testmodel.go", "TestModelIncludingOtherStruct", &doc2)
 	t.Logf("doc2 json = %v\n", string(doc2.robject.Data))
 	assert.T(t, err == nil)
-	assert.T(t, string(doc2.robject.Data) == `{"_type":"DMInclude","name":"some name","sub":{"_type":"SubStruct","value":"some value"}}`)
+	assert.T(t, string(doc2.robject.Data) == `{"name":"some name","sub":{"value":"some value"}}`)
 	assert.T(t, doc2.Name == doc.Name)
 	t.Logf("Sub struct = %v ? %v\n", doc2.Sub.Value, doc.Sub.Value)
 	assert.T(t, doc2.Sub.Value == doc.Sub.Value)

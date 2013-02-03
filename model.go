@@ -57,7 +57,6 @@ var (
 	DestinationIsNotSlice     = errors.New("Must supply a slice to GetSiblings")
 	DestinationLengthError    = errors.New("Length of slice does not match number of siblings")
 	DestinationNotInitialized = errors.New("Destination struct is not initialized (correctly) using riak.New or riak.Load")
-	ModelDoesNotMatch         = errors.New("Warning: struct name does not match _type in Riak")
 	ModelNotNew               = errors.New("Destination struct already has an instantiated riak.Model (this struct is probably not new)")
 	NoSiblingData             = errors.New("No non-empty sibling data")
 )
@@ -69,8 +68,6 @@ ModelDoesNotMatch.
 func IsWarning(err error) bool {
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "<nil> - json: cannot unmarshal") && strings.Contains(err.Error(), "into Go value of type") {
-			return true
-		} else if err == ModelDoesNotMatch {
 			return true
 		}
 	} else {
@@ -138,22 +135,11 @@ func check_dest(dest interface{}) (dv reflect.Value, dt reflect.Type, rm reflect
 	return
 }
 
-type modelName struct {
-	Type string `riak:"_type"`
-}
-
 /*
 	mapData, maps the decoded JSON data onto the right struct fields, including
 	decoding of links.
 */
 func (c *Client) mapData(dv reflect.Value, dt reflect.Type, data []byte, links []Link, dest interface{}) (err error) {
-	// Double check there is a "_type" field that is the same as the struct
-	// name, this is only a warning though.
-	var mn modelName
-	err = json.Unmarshal(data, &mn)
-	if err != nil || dt.Name() != mn.Type {
-		err = fmt.Errorf("Warning: struct name does not match _type in Riak (%v)", err)
-	}
 	// Unmarshal the destination model
 	jserr := json.Unmarshal(data, dest)
 	if jserr != nil {
