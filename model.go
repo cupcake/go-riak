@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/titanous/go.riak/json"
+	"github.com/titanous/go-riak/json"
 )
 
 /*

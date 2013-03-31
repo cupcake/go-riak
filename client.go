@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"code.google.com/p/goprotobuf/proto"
-	"github.com/titanous/go.riak/pb"
+	"github.com/titanous/go-riak/pb"
 )
 
 /*
@@ -36,7 +36,7 @@ type Client struct {
 	conns        chan *net.TCPConn
 }
 
-/* 
+/*
 Options for storing and retrieving data, only a few are defined, different
 values can be supplied by creating a map in the application, for example:
   bucket.Get("key", map[string]int{"r":2})
@@ -225,7 +225,7 @@ func (c *Client) response(conn *net.TCPConn, response proto.Message) (err error)
 	return err
 }
 
-// Reponse deserializes the data from a MapReduce response and returns the data, 
+// Reponse deserializes the data from a MapReduce response and returns the data,
 // this can come from multiple response messages
 func (c *Client) mr_response(conn *net.TCPConn) (response [][]byte, err error) {
 	defer c.releaseConn(conn)
@@ -303,7 +303,7 @@ func (c *Client) mr_response(conn *net.TCPConn) (response [][]byte, err error) {
 	return
 }
 
-// Deserializes the data from possibly multiple packets, 
+// Deserializes the data from possibly multiple packets,
 // currently only for pb.RpbListKeysResp.
 func (c *Client) mp_response(conn *net.TCPConn) (response [][]byte, err error) {
 	defer c.releaseConn(conn)

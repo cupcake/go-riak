@@ -3,7 +3,7 @@ package riak
 import (
 	"errors"
 
-	"github.com/titanous/go.riak/pb"
+	"github.com/titanous/go-riak/pb"
 )
 
 // A Riak link
