@@ -162,27 +162,22 @@ func TestModelWithManyLinks(t *testing.T) {
 	}
 }
 
-/*
-Example resolve function for DocumentModel. This selects the longest FieldS
-from the siblings, the largest FieldF and sets FieldB to true if any of the
-siblings have it set to true.
-*/
-func (d *DocumentModel) Resolve(count int) (err error) {
-	siblings := make([]DocumentModel, count)
-	err = d.GetSiblings(siblings)
+type ComplexModel struct {
+	Flags map[string]bool `riak:"a"`
+	Model
+}
+
+func (c *ComplexModel) Resolve(count int) (err error) {
+	siblings := make([]ComplexModel, count)
+	err = c.GetSiblings(siblings)
 	if err != nil {
 		return err
 	}
-	d.FieldB = false
 	for _, s := range siblings {
-		if len(s.FieldS) > len(d.FieldS) {
-			d.FieldS = s.FieldS
-		}
-		if s.FieldF > d.FieldF {
-			d.FieldF = s.FieldF
-		}
-		if s.FieldB {
-			d.FieldB = true
+		for key, flag := range s.Flags {
+			if flag {
+				c.Flags[key] = true
+			}
 		}
 	}
 	return
@@ -203,29 +198,29 @@ func TestConflictingModel(t *testing.T) {
 	err = bucket.Delete("TestModelKey")
 	assert.T(t, err == nil)
 
-	// Create a new "DocumentModel" and save it
-	doc := DocumentModel{FieldS: "text", FieldF: 1.2, FieldB: true}
-	err = client.New("testconflict.go", "TestModelKey", &doc)
+	// Create a new "CompleModel" and save it
+	m1 := ComplexModel{Flags: map[string]bool{"a": true, "b": false}}
+	err = client.New("testconflict.go", "TestModelKey", &m1)
 	assert.T(t, err == nil)
-	err = doc.Save()
+	err = m1.Save()
 	assert.T(t, err == nil)
 
 	// Create the same again (with the same key)
-	doc2 := DocumentModel{FieldS: "longer_text", FieldF: 1.4, FieldB: false}
-	err = client.New("testconflict.go", "TestModelKey", &doc2)
+	m2 := ComplexModel{Flags: map[string]bool{"a": false, "b": true, "c": true}}
+	err = client.New("testconflict.go", "TestModelKey", &m2)
 	assert.T(t, err == nil)
-	err = doc2.Save()
+	err = m2.Save()
 	assert.T(t, err == nil)
 
 	// Now load it from Riak to test conflicts
-	doc3 := DocumentModel{}
-	err = client.Load("testconflict.go", "TestModelKey", &doc3)
+	m3 := ComplexModel{}
+	err = client.Load("testconflict.go", "TestModelKey", &m3)
 	t.Logf("Loading model - %v\n", err)
-	t.Logf("DocumentModel = %v\n", doc3)
+	t.Logf("ComplexModel = %v\n", m3)
 	assert.T(t, err == nil)
-	assert.T(t, doc3.FieldS == doc2.FieldS) // doc2 has longer FieldS
-	assert.T(t, doc3.FieldF == doc2.FieldF) // doc2 has larger FieldF
-	assert.T(t, doc3.FieldB == doc.FieldB)  // doc has FieldB set to true
+	assert.T(t, m3.Flags["a"])
+	assert.T(t, m3.Flags["b"])
+	assert.T(t, m3.Flags["c"])
 
 	// Cleanup
 	err = bucket.Delete("TestModelKey")

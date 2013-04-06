@@ -215,10 +215,10 @@ func (m *Model) GetSiblings(dest interface{}) (err error) {
 	// Walk over the slice and map the data for each sibling
 	for _, sibling := range m.robject.Siblings {
 		if len(sibling.Data) != 0 {
-			// Map the data onto the parent struct
+			dest := reflect.New(reflect.TypeOf(m.parent).Elem())
+			err = client.mapData(dv, dt, sibling.Data, sibling.Links, dest.Interface())
 			err = client.mapData(dv, dt, sibling.Data, sibling.Links, m.parent)
-			// Copy the parent struct to the slice element
-			v.Index(count).Set(reflect.ValueOf(m.parent).Elem())
+			v.Index(count).Set(dest.Elem())
 			count += 1
 		}
 	}
