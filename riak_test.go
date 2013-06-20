@@ -19,7 +19,7 @@ func setupConnection(t *testing.T) (client *Client) {
 }
 
 func setupConnections(t *testing.T, count int) (client *Client) {
-	client = NewPool("127.0.0.1:8087", count)
+	client = NewPool([]string{"127.0.0.1:8087"}, count)
 	err := client.Connect()
 	assert.T(t, client != nil)
 	assert.T(t, err == nil)
@@ -458,7 +458,7 @@ func TestRunConnectionPool(t *testing.T) {
 	// Preparations
 	client := setupConnections(t, 2)
 	assert.T(t, client != nil)
-	assert.T(t, client.conn_count == 2)
+	assert.T(t, client.connCount == 2)
 	bucket, _ := client.Bucket("client_test.go")
 	assert.T(t, bucket != nil)
 	// Create object 1

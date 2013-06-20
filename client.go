@@ -28,12 +28,16 @@ protoc --go_out=. riak.proto
 // riak.Client the client interface
 type Client struct {
 	connected    bool
-	addr         string
-	tcpaddr      *net.TCPAddr
+	addrs        []string
 	readTimeout  time.Duration
 	writeTimeout time.Duration
-	conn_count   int
-	conns        chan *net.TCPConn
+	connCount    int
+	conns        chan conn
+}
+
+type conn struct {
+	addr *net.TCPAddr
+	c    *net.TCPConn
 }
 
 /*
@@ -57,33 +61,33 @@ var (
 
 // Returns a new Client connection
 func New(addr string) *Client {
-	return &Client{addr: addr, connected: false, readTimeout: 1e8, writeTimeout: 1e8, conn_count: 1}
+	return &Client{addrs: []string{addr}, connected: false, readTimeout: 1e8, writeTimeout: 1e8, connCount: 1}
 }
 
 // Returns a new Client with multiple connections to Riak
-func NewPool(addr string, count int) *Client {
-	return &Client{addr: addr, connected: false, readTimeout: 1e8, writeTimeout: 1e8, conn_count: count}
+func NewPool(addrs []string, count int) *Client {
+	return &Client{addrs: addrs, connected: false, readTimeout: 1e8, writeTimeout: 1e8, connCount: count}
 }
 
 // Connects to a Riak server.
 func (c *Client) Connect() (err error) {
-	tcpaddr, err := net.ResolveTCPAddr("tcp", c.addr)
-	if err != nil {
-		return err
-	}
-	c.tcpaddr = tcpaddr
-
-	if c.conn_count <= 0 {
+	if c.connCount <= 0 || len(c.addrs) == 0 {
 		return BadNumberOfConnections
 	} else if !c.connected {
 		// Create multiple connections to Riak and send these to the conns channel for later use
-		c.conns = make(chan *net.TCPConn, c.conn_count)
-		for i := 0; i < c.conn_count; i++ {
-			newconn, err := net.DialTCP("tcp", nil, c.tcpaddr)
-			if err != nil {
-				return err
+		c.conns = make(chan conn, c.connCount*len(c.addrs))
+		for i := 0; i < c.connCount; i++ {
+			for _, addr := range c.addrs {
+				tcpaddr, err := net.ResolveTCPAddr("tcp", addr)
+				if err != nil {
+					return err
+				}
+				newconn, err := net.DialTCP("tcp", nil, tcpaddr)
+				if err != nil {
+					return err
+				}
+				c.conns <- conn{addr: tcpaddr, c: newconn}
 			}
-			c.conns <- newconn
 		}
 	}
 	c.connected = true
@@ -97,26 +101,26 @@ func (c *Client) Close() {
 	}
 
 	// Close all the connections
-	for i := 0; i < c.conn_count; i++ {
+	for i := 0; i < c.connCount*len(c.addrs); i++ {
 		conn := <-c.conns
-		conn.Close()
+		conn.c.Close()
 	}
 	c.connected = false
 }
 
 // Write data to the connection
-func (c *Client) write(conn *net.TCPConn, request []byte) (err error) {
-	_, err = conn.Write(request)
+func (c *Client) write(conn conn, request []byte) (err error) {
+	_, err = conn.c.Write(request)
 
 	return err
 }
 
 // Read data from the connection
-func (c *Client) read(conn *net.TCPConn, size int) (response []byte, err error) {
+func (c *Client) read(conn conn, size int) (response []byte, err error) {
 	response = make([]byte, size)
 	s := 0
 	for i := 0; (size > 0) && (i < size); {
-		s, err = conn.Read(response[i:size])
+		s, err = conn.c.Read(response[i:size])
 		i += s
 		if err != nil {
 			return
@@ -126,13 +130,13 @@ func (c *Client) read(conn *net.TCPConn, size int) (response []byte, err error) 
 }
 
 // Gets the TCP connection for a client (either the only one, or one from the pool)
-func (c *Client) getConn() (err error, conn *net.TCPConn) {
+func (c *Client) getConn() (err error, conn conn) {
 	err = nil
 	// Connect if necessary
 	if !c.connected {
 		err = c.Connect()
 		if err != nil {
-			return err, nil
+			return
 		}
 	}
 	conn = <-c.conns
@@ -140,16 +144,16 @@ func (c *Client) getConn() (err error, conn *net.TCPConn) {
 }
 
 // Releases the TCP connection for use by subsequent requests
-func (c *Client) releaseConn(conn *net.TCPConn) {
+func (c *Client) releaseConn(conn conn) {
 	// Return this connection down the channel for re-use
 	c.conns <- conn
 }
 
 // Request serializes the data (using protobuf), adds the header and sends it to Riak.
-func (c *Client) request(req proto.Message, code byte) (err error, conn *net.TCPConn) {
+func (c *Client) request(req proto.Message, code byte) (err error, conn conn) {
 	err, conn = c.getConn()
 	if err != nil {
-		return err, nil
+		return
 	}
 	// Serialize the request using protobuf
 	pbmsg, err := proto.Marshal(req)
@@ -183,14 +187,14 @@ func (c *Client) request(req proto.Message, code byte) (err error, conn *net.TCP
 }
 
 // Reponse deserializes the data and returns a struct.
-func (c *Client) response(conn *net.TCPConn, response proto.Message) (err error) {
+func (c *Client) response(conn conn, response proto.Message) (err error) {
 	// Read the response from Riak
 	msgbuf, err := c.read(conn, 5)
 	if err != nil {
 		if err == io.EOF {
 			// Connection was closed, try to re-open the connection so subsequent
 			// i/o can succeed. Does report the error for this response.
-			conn, _ = net.DialTCP("tcp", nil, c.tcpaddr)
+			conn.c, _ = net.DialTCP("tcp", nil, conn.addr)
 		}
 		c.releaseConn(conn)
 		return err
@@ -227,7 +231,7 @@ func (c *Client) response(conn *net.TCPConn, response proto.Message) (err error)
 
 // Reponse deserializes the data from a MapReduce response and returns the data,
 // this can come from multiple response messages
-func (c *Client) mr_response(conn *net.TCPConn) (response [][]byte, err error) {
+func (c *Client) mr_response(conn conn) (response [][]byte, err error) {
 	defer c.releaseConn(conn)
 	// Read the response from Riak
 	msgbuf, err := c.read(conn, 5)
@@ -305,7 +309,7 @@ func (c *Client) mr_response(conn *net.TCPConn) (response [][]byte, err error) {
 
 // Deserializes the data from possibly multiple packets,
 // currently only for pb.RpbListKeysResp.
-func (c *Client) mp_response(conn *net.TCPConn) (response [][]byte, err error) {
+func (c *Client) mp_response(conn conn) (response [][]byte, err error) {
 	defer c.releaseConn(conn)
 	var (
 		partial *pb.RpbListKeysResp
