@@ -30,4 +30,8 @@ const (
 	rpbIndexResp
 	rpbSearchQueryReq
 	rbpSearchQueryResp
+	rpbCounterUpdateReq  = 50
+	rpbCounterUpdateResp = 51
+	rpbCounterGetReq     = 52
+	rpbCounterGetResp    = 53
 )
