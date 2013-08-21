@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"syscall"
+	"sync"
 	"time"
 
 	"code.google.com/p/goprotobuf/proto"
@@ -27,6 +27,7 @@ protoc --go_out=. riak.proto
 
 // riak.Client the client interface
 type Client struct {
+	stateMtx     sync.RWMutex
 	connected    bool
 	addrs        []string
 	readTimeout  time.Duration
@@ -61,33 +62,54 @@ var (
 
 // Returns a new Client connection
 func New(addr string) *Client {
-	return &Client{addrs: []string{addr}, connected: false, readTimeout: 1e8, writeTimeout: 1e8, connCount: 1}
+	return &Client{addrs: []string{addr}, readTimeout: 1e8, writeTimeout: 1e8, connCount: 1}
 }
 
 // Returns a new Client with multiple connections to Riak
 func NewPool(addrs []string, count int) *Client {
-	return &Client{addrs: addrs, connected: false, readTimeout: 1e8, writeTimeout: 1e8, connCount: count}
+	return &Client{addrs: addrs, readTimeout: 1e8, writeTimeout: 1e8, connCount: count}
 }
 
 // Connects to a Riak server.
 func (c *Client) Connect() (err error) {
 	if c.connCount <= 0 || len(c.addrs) == 0 {
 		return BadNumberOfConnections
-	} else if !c.connected {
-		// Create multiple connections to Riak and send these to the conns channel for later use
-		c.conns = make(chan conn, c.connCount*len(c.addrs))
-		for i := 0; i < c.connCount; i++ {
-			for _, addr := range c.addrs {
-				tcpaddr, err := net.ResolveTCPAddr("tcp", addr)
-				if err != nil {
-					return err
+	}
+
+	c.stateMtx.Lock()
+	defer c.stateMtx.Unlock()
+	if c.connected {
+		return nil
+	}
+
+	defer func() {
+		if err != nil {
+			// drain conns
+			for {
+				select {
+				case conn := <-c.conns:
+					conn.c.Close()
+				default:
+					return
 				}
-				newconn, err := net.DialTCP("tcp", nil, tcpaddr)
-				if err != nil {
-					return err
-				}
-				c.conns <- conn{addr: tcpaddr, c: newconn}
 			}
+		}
+	}()
+
+	// Create multiple connections to Riak and send these to the conns channel for later use
+	c.conns = make(chan conn, c.connCount*len(c.addrs))
+	for i := 0; i < c.connCount; i++ {
+		for _, addr := range c.addrs {
+			var conn conn
+			conn.addr, err = net.ResolveTCPAddr("tcp", addr)
+			if err != nil {
+				return err
+			}
+			conn.c, err = net.DialTCP("tcp", nil, conn.addr)
+			if err != nil {
+				return err
+			}
+			c.conns <- conn
 		}
 	}
 	c.connected = true
@@ -96,6 +118,8 @@ func (c *Client) Connect() (err error) {
 
 // Close the connection
 func (c *Client) Close() {
+	c.stateMtx.Lock()
+	defer c.stateMtx.Unlock()
 	if !c.connected {
 		return
 	}
@@ -133,7 +157,10 @@ func (c *Client) read(conn conn, size int) (response []byte, err error) {
 func (c *Client) getConn() (err error, conn conn) {
 	err = nil
 	// Connect if necessary
-	if !c.connected {
+	c.stateMtx.RLock()
+	connected := c.connected
+	c.stateMtx.RUnlock()
+	if !connected {
 		err = c.Connect()
 		if err != nil {
 			return
@@ -171,15 +198,13 @@ func (c *Client) request(req proto.Message, code byte) (err error, conn conn) {
 		// Make sure connection will be released in the end
 		defer c.releaseConn(conn)
 
-		var errno syscall.Errno
-
 		// If the error is not recoverable like a broken pipe, close all connections,
 		// so next time when getConn() is called it will Connect() again
-		if operr, ok := err.(*net.OpError); ok {
-			if errno, ok = operr.Err.(syscall.Errno); ok {
-				if errno == syscall.EPIPE {
-					c.Close()
-				}
+		if err == io.EOF {
+			c.Close()
+		} else if operr, ok := err.(*net.OpError); ok {
+			if !operr.Temporary() {
+				c.Close()
 			}
 		}
 	}
@@ -191,12 +216,10 @@ func (c *Client) response(conn conn, response proto.Message) (err error) {
 	// Read the response from Riak
 	msgbuf, err := c.read(conn, 5)
 	if err != nil {
-		if err == io.EOF {
-			// Connection was closed, try to re-open the connection so subsequent
-			// i/o can succeed. Does report the error for this response.
-			conn.c, _ = net.DialTCP("tcp", nil, conn.addr)
-		}
 		c.releaseConn(conn)
+		if err == io.EOF {
+			c.Close()
+		}
 		return err
 	}
 	defer c.releaseConn(conn)
