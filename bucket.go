@@ -13,23 +13,27 @@ type Bucket struct {
 }
 
 // Return a bucket
-func (c *Client) Bucket(name string) (*Bucket, error) {
-	req := &pb.RpbGetBucketReq{
-		Bucket: []byte(name),
-	}
-	err, conn := c.request(req, rpbGetBucketReq)
+func (c *Client) Bucket(name string) (bucket *Bucket, err error) {
+	for i := 0; i < 3; i++ {
+		req := &pb.RpbGetBucketReq{
+			Bucket: []byte(name),
+		}
+		var conn conn
+		err, conn = c.request(req, rpbGetBucketReq)
 
-	if err != nil {
-		return nil, err
-	}
-	resp := &pb.RpbGetBucketResp{}
-	err = c.response(conn, resp)
+		if err != nil {
+			continue
+		}
+		resp := &pb.RpbGetBucketResp{}
+		err = c.response(conn, resp)
 
-	if err != nil {
-		return nil, err
+		if err != nil {
+			continue
+		}
+		bucket = &Bucket{name: name, client: c, nval: *resp.Props.NVal, allowMult: *resp.Props.AllowMult}
+		return bucket, nil
 	}
-	bucket := &Bucket{name: name, client: c, nval: *resp.Props.NVal, allowMult: *resp.Props.AllowMult}
-	return bucket, nil
+	return nil, err
 }
 
 // Return the nval property of a bucket

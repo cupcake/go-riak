@@ -220,38 +220,42 @@ func (obj *RObject) AddLink(link Link) bool {
 
 // Get an object
 func (b *Bucket) Get(key string, options ...map[string]uint32) (obj *RObject, err error) {
-	req := &pb.RpbGetReq{
-		Bucket: []byte(b.name),
-		Key:    []byte(key),
-	}
-	for _, omap := range options {
-		for k, v := range omap {
-			switch k {
-			case "r":
-				req.R = &v
-			case "pr":
-				req.Pr = &v
+	for i := 0; i < 3; i++ {
+		req := &pb.RpbGetReq{
+			Bucket: []byte(b.name),
+			Key:    []byte(key),
+		}
+		for _, omap := range options {
+			for k, v := range omap {
+				switch k {
+				case "r":
+					req.R = &v
+				case "pr":
+					req.Pr = &v
+				}
 			}
 		}
-	}
-	err, conn := b.client.request(req, rpbGetReq)
-	if err != nil {
-		return nil, err
-	}
-	resp := &pb.RpbGetResp{}
-	err = b.client.response(conn, resp)
-	if err != nil {
-		return nil, err
-	}
-	// If no Content is returned then the object was  not found
-	if len(resp.Content) == 0 {
-		return &RObject{}, NotFound
-	}
-	// Create a new object and set the fields
-	obj = &RObject{Key: key, Bucket: b, Vclock: resp.Vclock, Options: options}
-	obj.setContent(resp)
+		err, conn := b.client.request(req, rpbGetReq)
+		if err != nil {
+			continue
+		}
+		resp := &pb.RpbGetResp{}
+		err = b.client.response(conn, resp)
+		if err != nil {
+			continue
+		}
+		// If no Content is returned then the object was  not found
+		if len(resp.Content) == 0 {
+			err = NotFound
+			continue
+		}
+		// Create a new object and set the fields
+		obj = &RObject{Key: key, Bucket: b, Vclock: resp.Vclock, Options: options}
+		obj.setContent(resp)
 
-	return obj, nil
+		return obj, nil
+	}
+	return nil, err
 }
 
 // Reload an object if it has changed (new Vclock)
