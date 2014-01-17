@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"code.google.com/p/goprotobuf/proto"
-	"github.com/titanous/go-riak/pb"
+	"github.com/cupcake/go-riak/pb"
 )
 
 /*

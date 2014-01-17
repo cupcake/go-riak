@@ -1,7 +1,7 @@
 package riak
 
 import (
-	"github.com/titanous/go-riak/pb"
+	"github.com/cupcake/go-riak/pb"
 )
 
 func (client *Client) CounterUpdate(bucket, key string, amount int64, options ...map[string]uint32) error {
@@ -34,8 +34,8 @@ func (client *Client) CounterUpdate(bucket, key string, amount int64, options ..
 }
 
 func (client *Client) CounterGet(bucket, key string, options ...map[string]uint32) (int64, error) {
-	req := &pb.RpbCounterGetReq{ Bucket: []byte(bucket),
-		Key:    []byte(key),
+	req := &pb.RpbCounterGetReq{Bucket: []byte(bucket),
+		Key: []byte(key),
 	}
 	for _, omap := range options {
 		for k, v := range omap {

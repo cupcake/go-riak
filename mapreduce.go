@@ -3,7 +3,7 @@ package riak
 import (
 	"encoding/json"
 
-	"github.com/titanous/go-riak/pb"
+	"github.com/cupcake/go-riak/pb"
 )
 
 // An object to build a MapReduce job similar to how the Ruby client can

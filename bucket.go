@@ -1,7 +1,7 @@
 package riak
 
 import (
-	"github.com/titanous/go-riak/pb"
+	"github.com/cupcake/go-riak/pb"
 )
 
 // Implements access to a bucket and its properties
